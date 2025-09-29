@@ -3,21 +3,24 @@ name: Build CasioEmuX (Windows)
 on:
   push:
     branches: [ "**" ]
-    tags:     [ "v*" ]
+    tags: [ "v*" ]
   pull_request:
 
 jobs:
   windows-build:
     runs-on: windows-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up MinGW-w64 (x64)
-        uses: egor-tensin/setup-mingw@v2
+      - name: Setup MSYS2 with MinGW-w64 (x64)
+        uses: msys2/setup-msys2@v2
         with:
-          platform: x64  # passt zu den 64-bit Libs im Repo
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+          # sorgt dafür, dass C:\msys64\mingw64\bin im PATH ist
+          msystem: MINGW64
 
       - name: Build emulator via build.bat
         shell: cmd
@@ -30,8 +33,6 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item -Force .\emulator\casioemu.exe .\dist\casioemu.exe
           Copy-Item -Force .\emulator\dlls\*.dll .\dist\
-          # optional: Modelle mit einpacken (kein ROM!)
-          # Copy-Item -Recurse -Force .\models\fx991cw_emu .\dist\models\fx991cw_emu
 
       - name: Create ZIP
         shell: pwsh
@@ -44,12 +45,3 @@ jobs:
           path: |
             CasioEmuX-win64.zip
             dist/**
-
-      # Optional: Automatisch GitHub Release anhängen, wenn ein Tag gepusht wird
-      - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: CasioEmuX-win64.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
