@@ -1,4 +1,4 @@
-name: CasioEmuX Windows Build (C++17)
+name: CasioEmuX Windows Build
 
 on:
   push:
@@ -27,24 +27,28 @@ jobs:
         shell: powershell
         run: echo "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
 
-      # --- C++17 erzwingen (ohne Codeänderung) ---
-      - name: Force C++17 in build.bat
+      # 🔧 Patch: constructor template-id -> normal constructor
+      - name: Patch CPU.hpp (constructor)
         shell: powershell
         working-directory: emulator
         run: |
-          $f = "build.bat"
-          if (!(Test-Path $f)) { Write-Error "emulator\build.bat not found"; exit 1 }
-          $c = Get-Content $f -Raw
-          $c = $c -replace '-std\s*=\s*(gnu\+\+)?20','-std=gnu++17'
-          $c = $c -replace '-std\s*=\s*(gnu\+\+)?2a','-std=gnu++17'
-          Set-Content $f $c -Encoding ASCII
-          echo "==== build.bat after patch ===="
-          type $f
+          $f = "src\Chipset\CPU.hpp"
+          if (!(Test-Path $f)) { Write-Error "File not found: $f"; exit 1 }
+          $raw = Get-Content $f -Raw
+          $patched = $raw -replace 'Register\s*<\s*value_type\s*>\s*\(\s*\)', 'Register()'
+          if ($raw -ne $patched) {
+            Set-Content $f $patched -Encoding UTF8
+            echo "Patched constructor in $f"
+          } else {
+            echo "No match found; showing context lines for 'Register<value_type>'"
+            Select-String -Path $f -Pattern 'Register<\s*value_type' -Context 0,4 || $true
+          }
+          echo "Preview around 'Register(' after patch:"
+          Select-String -Path $f -Pattern 'Register\(' -Context 0,2
 
       - name: Verify toolchain
         shell: cmd
         run: |
-          echo Current dir: %CD%
           where gcc
           gcc --version
           dir emulator
