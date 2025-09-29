@@ -1,15 +1,16 @@
-name: Build Windows EXE
+name: Build Windows EXE (C++17)
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: windows-2022  # stabil; vermeidet die 2025-Migration
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up MSYS2 (MINGW64 = msvcrt)
+      # Toolchain: MSYS2 MINGW64 (msvcrt, passt zu den mitgelieferten libs)
+      - name: Set up MSYS2 (MINGW64)
         uses: msys2/setup-msys2@v2
         with:
           update: true
@@ -22,11 +23,54 @@ jobs:
         shell: powershell
         run: echo "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
 
+      # ---- C++17 ERZWINGEN (ohne Repo-Änderungen) ----
+
+      # 1) build.bat patchen: alle c++20/c++2a -> gnu++17
+      - name: Force C++17 in build.bat
+        shell: powershell
+        working-directory: emulator
+        run: |
+          $f = "build.bat"
+          if (Test-Path $f) {
+            $c = Get-Content $f -Raw
+            $c = $c -replace '-std\s*=\s*(gnu\+\+)?20','-std=gnu++17'
+            $c = $c -replace '-std\s*=\s*(gnu\+\+)?2a','-std=gnu++17'
+            Set-Content $f $c -Encoding ASCII
+          }
+
+      # 2) Fallback: g++-Wrapper vorschalten, der -std=gnu++17 ergänzt, falls kein -std übergeben wird
+      - name: Add g++ wrapper (fallback to -std=gnu++17)
+        shell: powershell
+        run: |
+          $wrap = "C:\ccwrap"
+          New-Item -ItemType Directory -Path $wrap -Force | Out-Null
+          $real = 'C:\msys64\mingw64\bin\g++.exe'
+          $script = "@echo off
+setlocal EnableDelayedExpansion
+set HASSTD=0
+for %%A in (%*) do (
+  echo %%~A | findstr /I /R ""^-std="" >NUL && set HASSTD=1
+)
+if !HASSTD! EQU 0 (
+  ""$real"" -std=gnu++17 %*
+) else (
+  ""$real"" %*
+)"
+          Set-Content -Path (Join-Path $wrap 'g++.cmd') -Value $script -Encoding ASCII
+          # wrapper vor die echte Toolchain setzen
+          echo $wrap | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      # Diagnose, nur beim ersten Lauf hilfreich
       - name: Verify toolchain
         shell: cmd
         run: |
-          where gcc
-          gcc --version
+          where g++
+          g++ --version
+
+      - name: List repo (debug)
+        shell: cmd
+        run: dir
+      # -----------------------------------------------
 
       - name: Build (run build.bat inside emulator/)
         shell: cmd
