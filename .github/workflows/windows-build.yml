@@ -5,17 +5,22 @@ on:
 
 jobs:
   build:
-    runs-on: windows-2022   # stabil; kann auch windows-latest sein
+    runs-on: windows-2022  # stabil; vermeidet die 2025-Migration
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install TDM-GCC (Chocolatey)
+      - name: Set up MSYS2 (MINGW64 = msvcrt)
+        uses: msys2/setup-msys2@v2
+        with:
+          update: true
+          msystem: MINGW64
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-make
+
+      - name: Put MINGW64 on PATH
         shell: powershell
-        run: |
-          choco install -y tdm-gcc
-          # Häufige Installationspfade ins PATH hängen (einer trifft zu):
-          echo "C:\TDM-GCC-64\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
-          echo "C:\tools\tdm-gcc-64\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+        run: echo "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Verify toolchain
         shell: cmd
