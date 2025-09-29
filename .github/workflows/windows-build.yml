@@ -1,24 +1,28 @@
+name: Build Windows EXE
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
 jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Set up MinGW-w64
         uses: egor-tensin/setup-mingw@v2
         with:
           platform: x64
+          static: false
 
-      - name: Check toolchain
-        run: |
-          where gcc
-          gcc --version
+      - name: Show GCC version
+        run: gcc --version
 
-      - name: List repo (debug)
-        shell: cmd
-        run: dir
 
-      - name: Build (run build.bat inside emulator/)
+      - name: Build
         shell: cmd
         working-directory: emulator
         run: build.bat
@@ -28,5 +32,7 @@ jobs:
         with:
           name: CasioEmuX-build
           path: |
-            emulator\**\*.exe
-            emulator\**\*.dll
+            **/*.exe
+            **/*.dll
+            !**/node_modules/**
+            !**/.git/**
