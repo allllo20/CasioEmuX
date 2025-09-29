@@ -1,67 +1,55 @@
-name: CasioEmuX Windows Build
+name: Build CasioEmuX (Windows)
 
 on:
   push:
-    branches: [ stable, main, master ]
-  workflow_dispatch:
+    branches: [ "**" ]
+    tags:     [ "v*" ]
+  pull_request:
 
 jobs:
-  build:
-    runs-on: windows-2022
-    timeout-minutes: 30
+  windows-build:
+    runs-on: windows-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up MSYS2 (MINGW64)
-        uses: msys2/setup-msys2@v2
+      - name: Set up MinGW-w64 (x64)
+        uses: egor-tensin/setup-mingw@v2
         with:
-          update: true
-          msystem: MINGW64
-          install: >-
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-make
+          platform: x64  # passt zu den 64-bit Libs im Repo
 
-      - name: Put MINGW64 on PATH
-        shell: powershell
-        run: echo "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
-
-      # 🔧 Patch: constructor template-id -> normal constructor
-      - name: Patch CPU.hpp (constructor)
-        shell: powershell
-        working-directory: emulator
-        run: |
-          $f = "src\Chipset\CPU.hpp"
-          if (!(Test-Path $f)) { Write-Error "File not found: $f"; exit 1 }
-          $raw = Get-Content $f -Raw
-          $patched = $raw -replace 'Register\s*<\s*value_type\s*>\s*\(\s*\)', 'Register()'
-          if ($raw -ne $patched) {
-            Set-Content $f $patched -Encoding UTF8
-            echo "Patched constructor in $f"
-          } else {
-            echo "No match found; showing context lines for 'Register<value_type>'"
-            Select-String -Path $f -Pattern 'Register<\s*value_type' -Context 0,4 || $true
-          }
-          echo "Preview around 'Register(' after patch:"
-          Select-String -Path $f -Pattern 'Register\(' -Context 0,2
-
-      - name: Verify toolchain
-        shell: cmd
-        run: |
-          where gcc
-          gcc --version
-          dir emulator
-
-      - name: Build (run build.bat inside emulator/)
+      - name: Build emulator via build.bat
         shell: cmd
         working-directory: emulator
         run: build.bat
 
-      - name: Upload EXE
+      - name: Stage runtime files
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item -Force .\emulator\casioemu.exe .\dist\casioemu.exe
+          Copy-Item -Force .\emulator\dlls\*.dll .\dist\
+          # optional: Modelle mit einpacken (kein ROM!)
+          # Copy-Item -Recurse -Force .\models\fx991cw_emu .\dist\models\fx991cw_emu
+
+      - name: Create ZIP
+        shell: pwsh
+        run: Compress-Archive -Path .\dist\* -DestinationPath CasioEmuX-win64.zip
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CasioEmuX-build
+          name: CasioEmuX-win64
           path: |
-            emulator\**\*.exe
-            emulator\**\*.dll
+            CasioEmuX-win64.zip
+            dist/**
+
+      # Optional: Automatisch GitHub Release anhängen, wenn ein Tag gepusht wird
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: CasioEmuX-win64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
